@@ -1,4 +1,4 @@
-# aborg (Aduiobook Orginizer)
+# aborg (Audiobook Organizer)
 **NOTE: This tool is still in development and is currently in an alpha stage.**
 
 A tool for handling the organization of your audiobook collection.
@@ -13,7 +13,7 @@ aborg [OPTIONS] --source <SOURCE> --destination <DESTINATION>
 
 Options:
   -s, --source <SOURCE>            The directory containing the audiobook files you want to manage. This is the source directory for the operation
-  -d, --destination <DESTINATION>  The directory` where the managed files will be moved. This is the destination directory for the operation
+  -d, --destination <DESTINATION>  The directory where the managed files will be moved. This is the destination directory for the operation
   -p, --path-schema <PATH_SCHEMA>  The schema used to format the newly created destination directories. This uses the Handlebar schema style [default: "{{author}}/{{#if series}}{{series}}/{{/if}}{{title}}{{#if book_number_with_zeros}} - Book {{book_number_with_zeros}}{{/if}}"]
   -f, --file-schema <FILE_SCHEMA>  The schema used to format the files that are being moved. This uses the Handlebar schema style [default: "{{#if series}}{{series}} - {{/if}}{{title}}{{#if file_number_with_zeros}} ({{file_number_with_zeros}}){{/if}}"]
       --dry-run                    If set to true, the process will only display the actions that would be performed without actually renaming, moving, or deleting any files
@@ -29,13 +29,13 @@ Options:
 
 ---
 
-### Default Schema's
+### Default Schemas
 These are the default schemas, but you can define your own by using the `--path-schema` and `--file-schema`
 
 - Path: `{{author}}/{{#if series}}{{series}}/{{/if}}{{title}}{{#if book_number_with_zeros}} - Book {{book_number_with_zeros}}{{/if}}`
 - File: `{{#if series}}{{series}} - {{/if}}{{title}}{{#if file_number_with_zeros}} ({{file_number_with_zeros}}){{/if}}`
 
-Handlebar reference can be at [handlebarsjs.com](https://handlebarsjs.com/guide/)
+Handlebar references can be found at [handlebarsjs.com](https://handlebarsjs.com/guide/)
 
 ---
 

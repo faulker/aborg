@@ -1,7 +1,10 @@
 [package]
 name = "aborg"
+description = "A tool for handling the organization of your audiobook collection."
 version = "0.1.0"
 edition = "2024"
+authors = ["Winter Faulk <winter@faulk.me>"]
+license-file = "LICENSE"
 
 [dependencies]
 clap = {version = "4.5.51", features = ["derive"] }

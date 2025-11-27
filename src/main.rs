@@ -19,6 +19,10 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
+/// Represents the command-line arguments for the application.
+///
+/// This struct is used to parse and store the arguments provided by the user,
+/// including source and destination directories, schemas, and other options.
 struct Args {
     /// The directory containing the audiobook files you want to manage.
     /// This is the source directory for the operation.
@@ -64,6 +68,10 @@ struct Args {
 }
 
 #[derive(Deserialize, Debug, Serialize, Default)]
+/// Represents the raw metadata structure parsed from a JSON file.
+///
+/// This struct is used as an intermediate representation of metadata
+/// before it is converted into the `Metadata` struct.
 struct RawMetadata {
     title: String,
     subtitle: Option<String>,
@@ -76,6 +84,11 @@ struct RawMetadata {
     abridged: Option<bool>,
 }
 
+/// Represents the processed metadata for an audiobook.
+///
+/// This struct contains detailed information about an audiobook, including
+/// its title, author, series, and other attributes. It is derived from
+/// the `RawMetadata` struct.
 #[derive(Debug, Default, Serialize)]
 struct Metadata {
     title: String,
@@ -105,6 +118,9 @@ struct Metadata {
     file_number_with_zeros: Option<String>,
 }
 
+/// Represents the possible actions that can be performed on audiobook files.
+///
+/// This enum defines the options for copying, moving, or deleting files.
 #[derive(Debug, Clone, PartialEq)]
 enum ActionOpt {
     None = 0,
@@ -130,6 +146,10 @@ struct Config {
     metafile: String,
 }
 
+/// Represents the schema used for formatting file paths and names.
+///
+/// This struct contains templates for generating directory paths and file names
+/// based on metadata.
 #[derive(Debug)]
 struct Schema {
     path_template: String,
