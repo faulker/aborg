@@ -1,0 +1,88 @@
+name: Manual Release & Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New Version (e.g., 0.1.0)'
+        required: true
+        type: string
+
+env:
+  BINARY_NAME: aborg
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Bump Version & Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Update Cargo.toml version
+        run: |
+          # Replaces the first occurrence of version = "..." with the new version input
+          sed -i '0,/^version = .*/s//version = "${{ inputs.version }}"/' Cargo.toml
+          
+          # Optional: Print to verify
+          grep "^version =" Cargo.toml | head -n 1
+
+      - name: Commit and Push Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml
+          git commit -m "chore: bump version to ${{ inputs.version }}"
+          git tag v${{ inputs.version }}
+          git push origin main --tags
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Release v${{ inputs.version }}
+          draft: false
+          prerelease: false
+
+  build:
+    name: Build on ${{ matrix.os }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macos-13 = Intel Macs
+        # macos-latest = Apple Silicon Macs
+        os: [ubuntu-latest, macos-latest, macos-13]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Release
+        run: cargo build --release
+
+      - name: Rename Artifact (Linux)
+        if: runner.os == 'Linux'
+        run: mv target/release/${{ env.BINARY_NAME }} target/release/${{ env.BINARY_NAME }}-linux
+
+      - name: Rename Artifact (macOS Apple Silicon)
+        if: matrix.os == 'macos-latest'
+        run: mv target/release/${{ env.BINARY_NAME }} target/release/${{ env.BINARY_NAME }}-macos-arm64
+
+      - name: Rename Artifact (macOS Intel)
+        if: matrix.os == 'macos-13'
+        run: mv target/release/${{ env.BINARY_NAME }} target/release/${{ env.BINARY_NAME }}-macos-intel
+
+      - name: Upload Binary to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          files: target/release/${{ env.BINARY_NAME }}-*
