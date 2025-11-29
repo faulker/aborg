@@ -1,7 +1,7 @@
 [package]
 name = "aborg"
 description = "A tool for handling the organization of your audiobook collection."
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Winter Faulk <winter@faulk.me>"]
 license-file = "LICENSE"
