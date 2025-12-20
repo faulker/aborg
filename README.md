@@ -1,5 +1,5 @@
 # aborg (Audiobook Organizer)
-**NOTE: This tool is still in development and is currently in an beta stage.**
+**NOTE: This tool is still in development and is currently in a beta stage.**
 
 A tool for handling the organization of your audiobook collection.
 
@@ -30,7 +30,7 @@ Options:
 ## Workflow Example
 
 1. **Prepare Staging Directory:** Begin by placing your unorganized audiobook files into a specific directory that is configured as a library in [Audiobookshelf](https://www.audiobookshelf.org/). This ensures the server can successfully scan and index the files, making them available for metadata matching.
-2. **Generate Metadata:** Inside Audiobookshelf, match each book to a database entry (e.g., using Audible). This creates the required `metadata.json` file for each book.
+2. **Generate Metadata:** Inside Audiobookshelf, match each book to a database entry (e.g., using Audible as the metadata source). This creates the required `metadata.json` file for each book.
 3. **Test Run Aborg:** Run the tool using `--dry-run` first to verify the changes.
 
    ```bash
@@ -66,7 +66,7 @@ Handlebar references can be found at [handlebarsjs.com](https://handlebarsjs.com
 ---
 
 ### Metadata Available Fields
-These are the common data fields available in the `metadata.json` files.
+These are the data fields available in the `metadata.json` files that are available for reference in the path/file schema.
 
 | **Fields** | **Description** |
 | :--- | :--- |
@@ -82,8 +82,8 @@ These are the common data fields available in the `metadata.json` files.
 | language | The language the book is in |
 | abridged | True if the book is abridged |
 
-### Available Fields Pulled from File Name
-These are fields that are pulled from the unorganized file title, if they exist.
+### Available Fields Pulled from File
+These are fields that are pulled from the unorganized file name and/or the IDv3 tag data, if the data is present exist.
 
 | **Fields** | **Description** |
 | :--- | :--- |
