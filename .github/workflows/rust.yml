@@ -3,10 +3,14 @@ name: Manual Release & Build
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'New Version (e.g., 0.1.0)'
+      bump:
+        description: "Version bump type"
         required: true
-        type: string
+        type: choice
+        options:
+          - major
+          - minor
+          - bugfix
 
 env:
   BINARY_NAME: aborg
@@ -22,11 +26,38 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Update Cargo.toml version
+      - name: Bump version in Cargo.toml and Cargo.lock
+        id: bump_version
         run: |
-          # Replaces the first occurrence of version = "..." with the new version input
-          sed -i '0,/^version = .*/s//version = "${{ inputs.version }}"/' Cargo.toml
-          
+          set -e
+          # Extract current version
+          current_version=$(awk -F\" '/^version =/ {print $2; exit}' Cargo.toml)
+          IFS='.' read -r major minor patch <<< "$current_version"
+
+          case "${{ github.event.inputs.bump }}" in
+            major)
+              major=$((major + 1))
+              ;;
+            minor)
+              minor=$((minor + 1))
+              ;;
+            bugfix)
+              patch=$((patch + 1))
+              ;;
+          esac
+
+          new_version="${major}.${minor}.${patch}"
+
+          # Update Cargo.toml
+          sed -i "0,/^version = .*/s//version = \"$new_version\"/" Cargo.toml
+
+          # Update Cargo.lock
+          if [ -f Cargo.lock ]; then
+            sed -i "0,/^version = .*/s//version = \"$new_version\"/" Cargo.lock
+          fi
+
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+
           # Optional: Print to verify
           grep "^version =" Cargo.toml | head -n 1
 
@@ -34,16 +65,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml
-          git commit -m "chore: bump version to ${{ inputs.version }}"
-          git tag v${{ inputs.version }}
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to ${{ steps.bump_version.outputs.new_version }}"
+          git tag v${{ steps.bump_version.outputs.new_version }}
           git push origin main --tags
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ inputs.version }}
-          name: Release v${{ inputs.version }}
+          tag_name: v${{ steps.bump_version.outputs.new_version }}
+          name: Release v${{ steps.bump_version.outputs.new_version }}
           draft: false
           prerelease: false
 
@@ -53,15 +84,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # macos-13 = Intel Macs
-        # macos-latest = Apple Silicon Macs
         os: [ubuntu-latest, macos-latest, macos-13]
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: v${{ inputs.version }}
+          ref: v${{ needs.create-release.outputs.new_version }}
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -84,5 +113,5 @@ jobs:
       - name: Upload Binary to Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ inputs.version }}
+          tag_name: v${{ needs.create-release.outputs.new_version }}
           files: target/release/${{ env.BINARY_NAME }}-*
