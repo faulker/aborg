@@ -147,7 +147,7 @@ fn parse_from_filename(file_name: &str) -> Option<u16> {
 
     // 10. Solo Number Pattern (e.g. "02", "2")
     //    Only accept if the ENTIRE string is just the number.
-    let re_solo = Regex::new(r"^.*(\d+)$").unwrap();
+    let re_solo = Regex::new(r"^.*\s(\d+)$").unwrap();
     if let Some(caps) = re_solo.captures(file_name) {
         let num = caps[1].parse().ok();
         if let Some(n) = num {
@@ -185,6 +185,7 @@ mod tests {
             ("BH_19-37 title", Some(19)),
             ("19-37 title", Some(19)),
             ("Shadow 2", Some(2)),
+            ("Shadow 12", Some(12)),
             ("author - title - 19-37", Some(19)),
             ("The Lady of the Camellias_MP3WRAP", None),
             ("author - title 2025-11-27 with date", None),
