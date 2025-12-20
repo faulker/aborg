@@ -4,7 +4,7 @@ mod track;
 
 use clap::Parser;
 use colored::Colorize;
-use metadata::{Metadata, parse_metadata};
+use metadata::{Metadata, load_metadata};
 use schema::Schema;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -104,7 +104,7 @@ fn main() {
         1 => ActionOpt::Move,
         2 => ActionOpt::All,
         _ => {
-            println!("Unknow delete option value of '{}' set!", args.action);
+            println!("Unknown delete option value of '{}' set!", args.action);
             println!("Select one of the following options:");
             println!("0 = Copy files only.");
             println!("1 = Moves the files, keep directory.");
@@ -197,7 +197,7 @@ fn plan(schema: &Schema) -> Vec<Plan> {
                 if entry.file_name().to_str() == Some(target_file.as_str()) {
                     let metadata_file = entry.path().display().to_string();
                     // read the metadata_file
-                    match parse_metadata(&metadata_file) {
+                    match load_metadata(&metadata_file) {
                         Some(mut metadata) => match schema.fmt_path(&mut metadata) {
                             Ok(value) => actions.push(Plan {
                                 from: entry.path().parent().unwrap().display().to_string(),

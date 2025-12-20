@@ -30,7 +30,7 @@ impl Schema {
     pub fn fmt_path(&self, metadata: &mut Metadata) -> Result<String, RenderError> {
         let mut reg = Handlebars::new();
         reg.register_escape_fn(no_escape);
-        metadata.book_number_with_zeros = metadata.book_number.map(|num| format!("{:02}", num));
+        metadata.book_number_with_zeros = add_zero(&metadata.book_number);
         reg.register_template_string("path", &self.path_template)
             .unwrap();
         reg.set_strict_mode(true);
@@ -71,5 +71,18 @@ impl Schema {
         }
 
         Ok(full_file_name.to_string())
+    }
+}
+
+fn add_zero(num: &Option<String>) -> Option<String> {
+    if num.is_none() {
+        return None;
+    }
+
+    let s = format!("{}", num.as_ref().unwrap());
+    if s.find('.').unwrap_or(s.len()) == 1 {
+        Some(format!("0{}", s))
+    } else {
+        Some(s)
     }
 }
