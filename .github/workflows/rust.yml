@@ -22,6 +22,8 @@ jobs:
   create-release:
     name: Bump Version & Create Release
     runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump_version.outputs.new_version }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -30,7 +32,6 @@ jobs:
         id: bump_version
         run: |
           set -e
-          # Extract current version
           current_version=$(awk -F\" '/^version =/ {print $2; exit}' Cargo.toml)
           IFS='.' read -r major minor patch <<< "$current_version"
 
@@ -48,17 +49,12 @@ jobs:
 
           new_version="${major}.${minor}.${patch}"
 
-          # Update Cargo.toml
           sed -i "0,/^version = .*/s//version = \"$new_version\"/" Cargo.toml
-
-          # Update Cargo.lock
           if [ -f Cargo.lock ]; then
             sed -i "0,/^version = .*/s//version = \"$new_version\"/" Cargo.lock
           fi
 
           echo "new_version=$new_version" >> $GITHUB_OUTPUT
-
-          # Optional: Print to verify
           grep "^version =" Cargo.toml | head -n 1
 
       - name: Commit and Push Changes
@@ -84,7 +80,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-13]
+        os: [ubuntu-latest, macos-latest] # Removed macos-13
 
     steps:
       - name: Checkout Code
@@ -105,10 +101,6 @@ jobs:
       - name: Rename Artifact (macOS Apple Silicon)
         if: matrix.os == 'macos-latest'
         run: mv target/release/${{ env.BINARY_NAME }} target/release/${{ env.BINARY_NAME }}-macos-arm64
-
-      - name: Rename Artifact (macOS Intel)
-        if: matrix.os == 'macos-13'
-        run: mv target/release/${{ env.BINARY_NAME }} target/release/${{ env.BINARY_NAME }}-macos-intel
 
       - name: Upload Binary to Release
         uses: softprops/action-gh-release@v2
