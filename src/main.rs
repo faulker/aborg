@@ -6,6 +6,7 @@ use clap::Parser;
 use colored::Colorize;
 use metadata::{Metadata, load_metadata};
 use schema::Schema;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -235,14 +236,14 @@ fn plan(schema: &Schema) -> Vec<Plan> {
  */
 fn run(schema: &Schema, actions: Vec<Plan>) {
     let cfg = CONFIG.get().expect("CONFIG was not set");
+    let total = actions.len();
 
-    for mut action in actions {
-        println!("--\n");
-        let dde = fs::exists(&action.to);
-        if !dde.unwrap_or(false) {
-            match fs::create_dir_all(&action.to) {
-                Ok(_) => println!("{} {}", "Created Directory:".green(), action.to),
-                Err(err) => eprintln!("{} {}", "Error creating directory:".red(), err),
+    for (index, mut action) in actions.into_iter().enumerate() {
+        let dir_exists = fs::exists(&action.to).unwrap_or(false);
+        print_plan_header(index + 1, total, &action, dir_exists);
+        if !dir_exists {
+            if let Err(err) = fs::create_dir_all(&action.to) {
+                eprintln!("  {} {}", "Error creating directory:".red(), err);
             }
         }
 
@@ -254,16 +255,18 @@ fn run(schema: &Schema, actions: Vec<Plan>) {
             let destination_path = format!("{}/{}", action.to, file_name);
 
             if action.action == ActionOpt::All || action.action == ActionOpt::Move {
+                print_file_op("Move", &file, &action.from, &file_name);
                 move_file(&file, &destination_path);
             } else {
+                print_file_op("Copy", &file, &action.from, &file_name);
                 copy_file(&file, &destination_path);
             }
         }
 
         if action.action == ActionOpt::All {
             match fs::remove_dir_all(&action.from) {
-                Ok(_) => println!("{} {}", "Deleted:".yellow(), action.from),
-                Err(err) => eprintln!("{} {}", "Error deleting old directory:".red(), err),
+                Ok(_) => println!("\n  {} {}", "Deleted source:".yellow(), action.from),
+                Err(err) => eprintln!("\n  {} {}", "Error deleting old directory:".red(), err),
             }
 
             let path = Path::new(&action.from);
@@ -275,14 +278,85 @@ fn run(schema: &Schema, actions: Vec<Plan>) {
                     }
 
                     match fs::remove_dir(p) {
-                        Ok(_) => println!("{} '{:?}'", "Deleted:".yellow(), p),
+                        Ok(_) => println!("  {} {}", "Deleted parent:".yellow(), p.display()),
                         Err(_) => {
-                            eprintln!("{} {:?}", "Unempty directory, not deleting:".yellow(), p);
+                            eprintln!(
+                                "  {} {}",
+                                "Parent not empty, not deleting:".yellow(),
+                                p.display()
+                            );
                         }
                     }
                 }
                 None => (),
             }
+        }
+    }
+}
+
+/**
+ * Print the header block for one book: where it comes from and where it goes.
+ *
+ * @param index 1-based position of this book in the plan list.
+ * @param total Total number of books in the plan list.
+ * @param plan The plan being processed.
+ * @param dir_exists Whether the destination directory already exists.
+ */
+fn print_plan_header(index: usize, total: usize, plan: &Plan, dir_exists: bool) {
+    let title = format!("Book {} of {}", index, total);
+    println!("\n{} {}", title.bold().cyan(), "━".repeat(40).cyan());
+    println!("  {} {}", "From:".bold(), plan.from);
+    if dir_exists {
+        println!("  {}   {}", "To:".bold(), plan.to.green());
+    } else {
+        println!(
+            "  {}   {} {}",
+            "To:".bold(),
+            plan.to.green(),
+            "(new directory)".dimmed()
+        );
+    }
+    println!();
+}
+
+/**
+ * Print a single file operation as two lines: the source name, then the new name.
+ * Paths are shown relative to the book's source and destination directories.
+ * Leaves the cursor at the end of the second line so a status can be appended.
+ *
+ * @param verb The operation label (e.g. "Copy" or "Move").
+ * @param file Full path of the source file.
+ * @param from_dir The book's source directory, used to shorten `file`.
+ * @param new_name The rendered destination file name.
+ */
+fn print_file_op(verb: &str, file: &Path, from_dir: &str, new_name: &str) {
+    let source = file
+        .strip_prefix(from_dir)
+        .unwrap_or(file)
+        .display()
+        .to_string();
+    println!("  {:<5} {}", verb.blue(), source);
+    print!("  {:>5} {}", "->".dimmed(), new_name.green());
+}
+
+/**
+ * Record a planned destination and report whether it was already claimed.
+ *
+ * @param seen Map of destination path to the source file that first claimed it.
+ * @param destination The destination path about to be written.
+ * @param source The source file that would be written there.
+ * @return The source that already claimed `destination`, if any.
+ */
+fn record_destination(
+    seen: &mut HashMap<String, PathBuf>,
+    destination: &str,
+    source: &Path,
+) -> Option<PathBuf> {
+    match seen.get(destination) {
+        Some(existing) => Some(existing.clone()),
+        None => {
+            seen.insert(destination.to_string(), source.to_path_buf());
+            None
         }
     }
 }
@@ -294,17 +368,10 @@ fn run(schema: &Schema, actions: Vec<Plan>) {
  * @param destination_path The path to copy the file to.
  */
 fn copy_file(file: &PathBuf, destination_path: &String) {
-    print!(
-        "\n{} '{}' to '{}'...",
-        "Copying:".blue(),
-        file.to_str().unwrap(),
-        destination_path.green()
-    );
     match fs::copy(&file, &destination_path) {
-        Ok(_) => {
-            print!(" Done\n");
-        }
-        Err(err) => eprintln!("{} {}", "Error copying file:".red(), err),
+        Ok(_) => println!("  {}", "done".dimmed()),
+        Err(err) => eprintln!("
+  {} {}", "Error copying file:".red(), err),
     }
 }
 
@@ -315,17 +382,10 @@ fn copy_file(file: &PathBuf, destination_path: &String) {
  * @param destination_path The path to move the file to.
  */
 fn move_file(file: &PathBuf, destination_path: &String) {
-    print!(
-        "{} '{}' to '{}'...",
-        "Moving:".blue(),
-        file.to_str().unwrap(),
-        destination_path.green()
-    );
     match fs::rename(&file, &destination_path) {
-        Ok(_) => {
-            println!(" Done");
-        }
-        Err(err) => eprintln!("{} {}", "Error copying file:".red(), err),
+        Ok(_) => println!("  {}", "done".dimmed()),
+        Err(err) => eprintln!("
+  {} {}", "Error moving file:".red(), err),
     }
 }
 
@@ -339,13 +399,13 @@ fn move_file(file: &PathBuf, destination_path: &String) {
  */
 fn dry_run(schema: &Schema, actions: Vec<Plan>) {
     let cfg = CONFIG.get().expect("CONFIG was not set");
+    let total = actions.len();
+    let mut seen: HashMap<String, PathBuf> = HashMap::new();
+    let mut duplicates = 0;
 
-    for mut action in actions {
-        println!("--\n");
-        let dde = fs::exists(&action.to);
-        if !dde.unwrap_or(false) {
-            println!("{} {}", "Created Directory:".green(), action.to);
-        }
+    for (index, mut action) in actions.into_iter().enumerate() {
+        let dir_exists = fs::exists(&action.to).unwrap_or(false);
+        print_plan_header(index + 1, total, &action, dir_exists);
 
         let files: Vec<PathBuf> = get_files(&action.from);
         for file in files {
@@ -355,27 +415,37 @@ fn dry_run(schema: &Schema, actions: Vec<Plan>) {
             let destination_path = format!("{}/{}", action.to, file_name);
 
             if action.action == ActionOpt::Move || action.action == ActionOpt::All {
-                print!(
-                    "{} '{}' to '{}'...",
-                    "Moving:".blue(),
-                    file.to_str().unwrap(),
-                    destination_path.green()
-                );
+                print_file_op("Move", &file, &action.from, &file_name);
             } else {
-                print!(
-                    "{} '{}' to '{}'...",
-                    "Copying:".blue(),
-                    file.to_str().unwrap(),
-                    destination_path.green()
+                print_file_op("Copy", &file, &action.from, &file_name);
+            }
+            println!();
+
+            if let Some(first) = record_destination(&mut seen, &destination_path, &file) {
+                duplicates += 1;
+                println!(
+                    "  {} same destination as '{}', this would overwrite it",
+                    "WARNING:".bold().red(),
+                    first.display().to_string().red()
                 );
             }
-
-            println!(" Done");
         }
 
         if action.action == ActionOpt::All {
-            println!("{} {:?}", "Deleted:".yellow(), action.from);
+            println!("\n  {} {}", "Delete source:".yellow(), action.from);
         }
+    }
+
+    if duplicates > 0 {
+        println!(
+            "\n{}",
+            format!(
+                "WARNING: {} file(s) would overwrite another file with the same destination name.",
+                duplicates
+            )
+            .bold()
+            .red()
+        );
     }
 }
 
@@ -399,4 +469,36 @@ fn get_files(dir: &String) -> Vec<PathBuf> {
     }
 
     files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn record_destination_flags_duplicates() {
+        let mut seen = HashMap::new();
+        let first = Path::new("/src/a/01.mp3");
+        let second = Path::new("/src/b/01.mp3");
+
+        assert_eq!(record_destination(&mut seen, "/out/Book (001).mp3", first), None);
+        assert_eq!(
+            record_destination(&mut seen, "/out/Book (001).mp3", second),
+            Some(first.to_path_buf())
+        );
+        // The first claimant is kept, not replaced by later duplicates
+        assert_eq!(
+            record_destination(&mut seen, "/out/Book (001).mp3", Path::new("/src/c/01.mp3")),
+            Some(first.to_path_buf())
+        );
+    }
+
+    #[test]
+    fn record_destination_allows_distinct_names() {
+        let mut seen = HashMap::new();
+        let src = Path::new("/src/a/01.mp3");
+
+        assert_eq!(record_destination(&mut seen, "/out/Book (001).mp3", src), None);
+        assert_eq!(record_destination(&mut seen, "/out/Book (002).mp3", src), None);
+    }
 }

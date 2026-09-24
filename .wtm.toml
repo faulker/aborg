@@ -1,0 +1,5 @@
+# wtm settings for this repo. Edit by hand or use `wtm config set`.
+# worktree_dir: "sibling", "inside", "home", or a path; {repo} = repo name.
+# [setup] copy = files copied into new worktrees, run = commands run in them.
+
+worktree_dir = "sibling"
