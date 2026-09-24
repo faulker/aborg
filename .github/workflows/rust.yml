@@ -17,13 +17,15 @@ env:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  create-release:
-    name: Bump Version & Create Release
+  bump-version:
+    name: Open Version Bump PR
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.bump_version.outputs.new_version }}
+      branch: ${{ steps.bump_version.outputs.branch }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -38,9 +40,12 @@ jobs:
           case "${{ github.event.inputs.bump }}" in
             major)
               major=$((major + 1))
+              minor=0
+              patch=0
               ;;
             minor)
               minor=$((minor + 1))
+              patch=0
               ;;
             bugfix)
               patch=$((patch + 1))
@@ -48,32 +53,36 @@ jobs:
           esac
 
           new_version="${major}.${minor}.${patch}"
+          branch="release/v${new_version}"
 
           sed -i "0,/^version = .*/s//version = \"$new_version\"/" Cargo.toml
 
-          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
           grep "^version =" Cargo.toml | head -n 1
 
-      - name: Commit and Push Changes
+      - name: Push bump branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${{ steps.bump_version.outputs.branch }}"
           git add Cargo.toml
           git commit -m "chore: bump version to ${{ steps.bump_version.outputs.new_version }}"
-          git tag v${{ steps.bump_version.outputs.new_version }}
-          git push origin main --tags
+          git push origin "${{ steps.bump_version.outputs.branch }}"
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.bump_version.outputs.new_version }}
-          name: Release v${{ steps.bump_version.outputs.new_version }}
-          draft: false
-          prerelease: false
+      - name: Open version bump PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "${{ steps.bump_version.outputs.branch }}" \
+            --title "chore: bump version to ${{ steps.bump_version.outputs.new_version }}" \
+            --body "Automated version bump for release v${{ steps.bump_version.outputs.new_version }}. This PR is merged automatically once the release build passes."
 
   build:
     name: Build on ${{ matrix.os }}
-    needs: create-release
+    needs: bump-version
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -83,7 +92,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: v${{ needs.create-release.outputs.new_version }}
+          ref: ${{ needs.bump-version.outputs.branch }}
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -99,8 +108,64 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: mv target/release/${{ env.BINARY_NAME }} target/release/${{ env.BINARY_NAME }}-macos-arm64
 
-      - name: Upload Binary to Release
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.os }}
+          path: target/release/${{ env.BINARY_NAME }}-*
+
+  merge-and-release:
+    name: Merge PR & Create Release
+    needs: [bump-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Merge version bump PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge "${{ needs.bump-version.outputs.branch }}" --merge --delete-branch
+
+      - name: Tag release
+        run: |
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          git tag "v${{ needs.bump-version.outputs.new_version }}"
+          git push origin "v${{ needs.bump-version.outputs.new_version }}"
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.create-release.outputs.new_version }}
-          files: target/release/${{ env.BINARY_NAME }}-*
+          tag_name: v${{ needs.bump-version.outputs.new_version }}
+          name: Release v${{ needs.bump-version.outputs.new_version }}
+          draft: false
+          prerelease: false
+          files: artifacts/*
+
+  cleanup-on-failure:
+    name: Close PR on Build Failure
+    needs: [bump-version, build]
+    if: ${{ failure() && needs.bump-version.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close PR without merging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr close "${{ needs.bump-version.outputs.branch }}" \
+            --repo "${{ github.repository }}" \
+            --delete-branch \
+            --comment "Build failed, so this automated version bump was not merged. No tag or release was created."
